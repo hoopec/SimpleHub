@@ -23,7 +23,7 @@ async function routes(fastify) {
     
     // 获取所有站点
     const sites = await prisma.site.findMany({ 
-      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ pinned: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
       include: { category: true }
     });
     
@@ -99,7 +99,7 @@ async function routes(fastify) {
   fastify.get('/api/sites/export', async (request, reply) => {
     try {
       const sites = await prisma.site.findMany({
-        orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ pinned: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
         include: { category: true }
       });
       
@@ -133,7 +133,7 @@ async function routes(fastify) {
   fastify.get('/api/exports/sites', async (request, reply) => {
     try {
       const sites = await prisma.site.findMany({
-        orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ pinned: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
         include: { category: true }
       });
 
@@ -279,6 +279,7 @@ async function routes(fastify) {
           checkInMode: { type: 'string', enum: ['model', 'checkin', 'both'] },
           extralink: { type: 'string' },
           remark: { type: 'string' },
+          sortOrder: { type: 'number' },
         },
       },
     },
@@ -290,7 +291,7 @@ async function routes(fastify) {
       billingUrl = null, billingAuthType = 'token', billingAuthValue = null, 
       billingLimitField = null, billingUsageField = null, unlimitedQuota = false,
       enableCheckIn = false, checkInMode = 'both',
-      extralink = null, remark = null
+      extralink = null, remark = null, sortOrder = 0
     } = request.body;
     
     const apiKeyEnc = encrypt(apiKey);
@@ -306,7 +307,7 @@ async function routes(fastify) {
         billingUrl, billingAuthType, billingAuthValue: billingAuthValueEnc, 
         billingLimitField, billingUsageField, unlimitedQuota,
         enableCheckIn, checkInMode,
-        extralink, remark
+        extralink, remark, sortOrder
       } 
     });
     onSiteUpdated(site, fastify);
@@ -340,6 +341,7 @@ async function routes(fastify) {
           checkInMode: { type: 'string', enum: ['model', 'checkin', 'both'] },
           extralink: { type: 'string' },
           remark: { type: 'string' },
+          sortOrder: { type: 'number' },
         },
       },
     },
@@ -351,7 +353,7 @@ async function routes(fastify) {
       categoryId,
       billingUrl, billingAuthType, billingAuthValue, billingLimitField, billingUsageField, unlimitedQuota,
       enableCheckIn, checkInMode,
-      extralink, remark
+      extralink, remark, sortOrder
     } = request.body || {};
     
     try {
@@ -367,6 +369,7 @@ async function routes(fastify) {
       if ('unlimitedQuota' in request.body) data.unlimitedQuota = Boolean(unlimitedQuota);
       if ('enableCheckIn' in request.body) data.enableCheckIn = Boolean(enableCheckIn);
       if (categoryId !== undefined) data.categoryId = categoryId || null;
+      if ('sortOrder' in request.body) data.sortOrder = Number(sortOrder) || 0;
       if (billingUrl !== undefined) data.billingUrl = billingUrl;
       if (billingAuthType !== undefined) data.billingAuthType = billingAuthType;
       if (billingAuthValue !== undefined) {
@@ -410,6 +413,43 @@ async function routes(fastify) {
     await prisma.modelSnapshot.deleteMany({ where: { siteId: id } });
     await prisma.site.delete({ where: { id } });
     return { ok: true };
+  });
+
+  // 批量更新站点排序
+  fastify.post('/api/sites/reorder', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['orders'],
+        properties: {
+          orders: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['id', 'sortOrder'],
+              properties: {
+                id: { type: 'string' },
+                sortOrder: { type: 'number' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { orders } = request.body;
+    try {
+      await Promise.all(
+        orders.map(({ id, sortOrder }) =>
+          prisma.site.update({ where: { id }, data: { sortOrder } })
+        )
+      );
+      return { ok: true };
+    } catch (e) {
+      fastify.log.error(e);
+      reply.code(500);
+      return { error: '更新排序失败: ' + e.message };
+    }
   });
 
   fastify.post('/api/sites/:id/check', {

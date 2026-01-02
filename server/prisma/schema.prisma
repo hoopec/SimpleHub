@@ -38,6 +38,7 @@ model Site {
   category          Category?        @relation(fields: [categoryId], references: [id])
   extralink         String?
   remark            String?
+  sortOrder         Int              @default(0)
   lastCheckedAt     DateTime?
   createdAt         DateTime         @default(now())
   snapshots         ModelSnapshot[]

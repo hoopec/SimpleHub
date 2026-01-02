@@ -1,13 +1,43 @@
-import { useEffect, useState, memo, useCallback } from 'react'
+import { useEffect, useState, memo, useCallback, useMemo, useRef } from 'react'
 import { Button, Card, Form, Input, Modal, Space, Table, Tag, message, InputNumber, Typography, Popconfirm, TimePicker, Switch, Tooltip, Progress, Select, Collapse, Divider } from 'antd'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { PlusOutlined, EyeOutlined, ThunderboltOutlined, ClockCircleOutlined, GlobalOutlined, EditOutlined, DeleteOutlined, ExclamationCircleOutlined, BugOutlined, MailOutlined, CheckCircleOutlined, PushpinOutlined, PushpinFilled, StopOutlined, DownOutlined, RightOutlined, SearchOutlined, FolderOutlined, AppstoreAddOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
-// 添加金光闪闪动画样式
+// 添加金光闪闪动画样式和响应式样式
 const shimmerStyle = document.createElement('style');
-shimmerStyle.textContent = `@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`;
+shimmerStyle.textContent = `
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@media (max-width: 768px) {
+  .site-card-mobile { margin-bottom: 12px; }
+  .site-card-mobile .ant-card-body { padding: 12px; }
+  .mobile-action-btn { padding: 4px 8px; font-size: 12px; }
+}
+`;
 document.head.appendChild(shimmerStyle);
+
+// 自定义 Hook：检测是否为移动端
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+// 优化的表格组件，避免不必要的重渲染
+const MemoTable = memo(({ dataSource, columns, loading }) => (
+  <Table
+    rowKey="id"
+    dataSource={dataSource}
+    columns={columns}
+    loading={loading}
+    pagination={false}
+    style={{ borderRadius: '0 0 8px 8px' }}
+  />
+))
 
 function authHeaders(includeJson = false) {
   const t = localStorage.getItem('token');
@@ -53,6 +83,7 @@ export default function Sites() {
   const [categoryForm] = Form.useForm()
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryCheckingId, setCategoryCheckingId] = useState(null)
+  const isMobile = useIsMobile()
   const [collapsedGroups, setCollapsedGroups] = useState(() => {
     const saved = sessionStorage.getItem('sitesCollapsedGroups')
     if (saved) {
@@ -67,6 +98,24 @@ export default function Sites() {
   
   const nav = useNavigate()
   const location = useLocation()
+
+  // 自动保存折叠状态
+  useEffect(() => {
+    sessionStorage.setItem('sitesCollapsedGroups', JSON.stringify([...collapsedGroups]))
+  }, [collapsedGroups])
+
+  // 缓存过滤后的站点数据，避免重复计算
+  const pinnedSites = useMemo(() => list.filter(s => s.pinned), [list])
+  const uncategorizedSites = useMemo(() => list.filter(s => !s.categoryId && !s.pinned), [list])
+  
+  // 缓存各分类的站点数据
+  const categorySitesMap = useMemo(() => {
+    const map = new Map()
+    categories.forEach(cat => {
+      map.set(cat.id, list.filter(s => s.categoryId === cat.id && !s.pinned))
+    })
+    return map
+  }, [list, categories])
 
   const load = async (search = '') => {
     setLoading(true)
@@ -100,15 +149,17 @@ export default function Sites() {
     }
   }
 
-  const toggleGroupCollapse = (groupId) => {
-    const newCollapsed = new Set(collapsedGroups)
-    if (newCollapsed.has(groupId)) {
-      newCollapsed.delete(groupId)
-    } else {
-      newCollapsed.add(groupId)
-    }
-    setCollapsedGroups(newCollapsed)
-  }
+  const toggleGroupCollapse = useCallback((groupId) => {
+    setCollapsedGroups(prev => {
+      const newCollapsed = new Set(prev)
+      if (newCollapsed.has(groupId)) {
+        newCollapsed.delete(groupId)
+      } else {
+        newCollapsed.add(groupId)
+      }
+      return newCollapsed
+    })
+  }, [])
 
   const loadScheduleConfig = async () => {
     try {
@@ -919,7 +970,143 @@ export default function Sites() {
     }
   }, [])
 
-  const columns = [
+  // 更新站点排序
+  const updateSortOrder = async (siteId, newValue) => {
+    console.log('更新排序:', siteId, newValue);
+    try {
+      const res = await fetch(`/api/sites/${siteId}`, {
+        method: 'PATCH',
+        headers: authHeaders(true),
+        body: JSON.stringify({ sortOrder: Number(newValue) })
+      });
+      const data = await res.json();
+      console.log('更新结果:', data);
+      if (!res.ok) throw new Error(data.error || '更新失败');
+      message.success('排序已更新');
+      await load(searchKeyword);
+    } catch (e) {
+      console.error('更新排序失败:', e);
+      message.error('更新排序失败');
+    }
+  };
+
+  // 移动端站点卡片组件 - 使用 useCallback 优化
+  const renderMobileSiteCard = useCallback((site) => {
+    const { billingLimit, billingUsage, unlimitedQuota, apiType, enableCheckIn, checkInSuccess } = site;
+    
+    let balanceDisplay = null;
+    if (unlimitedQuota) {
+      balanceDisplay = <Tag color="gold" style={{ margin: 0 }}>无限额</Tag>;
+    } else if (typeof billingLimit === 'number' && typeof billingUsage === 'number') {
+      const remaining = billingLimit - billingUsage;
+      const percentage = (billingUsage / billingLimit) * 100;
+      const color = percentage > 90 ? '#ff4d4f' : percentage > 70 ? '#fa8c16' : '#52c41a';
+      balanceDisplay = <span style={{ color, fontWeight: 600, fontSize: 13 }}>${remaining.toFixed(2)}</span>;
+    }
+
+    let checkInDisplay = null;
+    if ((apiType === 'veloera' || apiType === 'newapi') && enableCheckIn) {
+      if (checkInSuccess === true) {
+        checkInDisplay = <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 14 }} />;
+      } else if (checkInSuccess === false) {
+        checkInDisplay = <span style={{ color: '#ff4d4f', fontSize: 14 }}>✖</span>;
+      } else {
+        checkInDisplay = <span style={{ color: '#faad14', fontSize: 14 }}>●</span>;
+      }
+    }
+
+    return (
+      <Card key={site.id} size="small" className="site-card-mobile" style={{ borderRadius: 10, marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+              <Typography.Link href={site.baseUrl} target="_blank" strong style={{ fontSize: 14, color: '#1890ff' }} ellipsis>
+                {site.name}
+              </Typography.Link>
+              {site.pinned && <PushpinFilled style={{ color: '#fa8c16', fontSize: 11 }} />}
+            </div>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>{site.apiType?.toUpperCase()}</Typography.Text>
+          </div>
+          <Space size={6}>{balanceDisplay}{checkInDisplay}</Space>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography.Text type="secondary" style={{ fontSize: 10 }}>
+            {site.lastCheckedAt ? new Date(site.lastCheckedAt).toLocaleString('zh-CN') : '未检测'}
+          </Typography.Text>
+          <Space size={4}>
+            <Button size="small" icon={<EyeOutlined />} onClick={() => { sessionStorage.setItem('sitesScrollPosition', window.scrollY.toString()); nav(`/sites/${site.id}`); }} />
+            <Button size="small" icon={<ThunderboltOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }} onClick={() => onCheck(site.id)} />
+            <Button size="small" icon={<EditOutlined />} style={{ color: '#1890ff', borderColor: '#1890ff' }} onClick={() => openEditModal(site)} />
+            <Popconfirm title="确定删除？" onConfirm={() => onDelete(site)} okText="删除" cancelText="取消">
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Space>
+        </div>
+      </Card>
+    );
+  }, [nav, onCheck, openEditModal, onDelete]);
+
+  // 移动端站点列表（支持展开/折叠）
+  const renderMobileSiteList = useCallback((sites, title, titleColor = '#1890ff', icon, groupId) => {
+    if (!sites || sites.length === 0) return null;
+    const isCollapsed = collapsedGroups.has(groupId);
+    return (
+      <div style={{ marginBottom: 16 }} key={title}>
+        <div 
+          style={{ 
+            background: `linear-gradient(135deg, ${titleColor} 0%, ${titleColor}dd 100%)`, 
+            padding: '10px 14px', 
+            borderRadius: isCollapsed ? '10px' : '10px 10px 0 0', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 8,
+            cursor: 'pointer'
+          }}
+          onClick={() => toggleGroupCollapse(groupId)}
+        >
+          {isCollapsed ? 
+            <RightOutlined style={{ color: 'white', fontSize: 12 }} /> : 
+            <DownOutlined style={{ color: 'white', fontSize: 12 }} />
+          }
+          {icon}
+          <Typography.Text strong style={{ color: 'white', fontSize: 14 }}>{title}</Typography.Text>
+          <Tag style={{ margin: 0 }}>{sites.length}</Tag>
+        </div>
+        {!isCollapsed && (
+          <div style={{ background: '#fafafa', padding: 10, borderRadius: '0 0 10px 10px' }}>
+            {sites.map(renderMobileSiteCard)}
+          </div>
+        )}
+      </div>
+    );
+  }, [renderMobileSiteCard, collapsedGroups, toggleGroupCollapse]);
+
+  const columns = useMemo(() => [
+    {
+      title: <span style={{ fontSize: 15, fontWeight: 600 }}>排序</span>,
+      dataIndex: 'sortOrder',
+      width: 70,
+      align: 'center',
+      render: (value, record) => (
+        <InputNumber
+          key={`sort-${record.id}-${value ?? 0}`}
+          size="small"
+          min={0}
+          max={9999}
+          defaultValue={value ?? 0}
+          style={{ width: 50 }}
+          onBlur={(e) => {
+            const newValue = parseInt(e.target.value, 10) || 0;
+            if (newValue !== (value ?? 0)) {
+              updateSortOrder(record.id, newValue);
+            }
+          }}
+          onPressEnter={(e) => {
+            e.target.blur();
+          }}
+        />
+      )
+    },
     {
       title: <span style={{ fontSize: 15, fontWeight: 600 }}>名称</span>,
       dataIndex: 'name',
@@ -1070,8 +1257,8 @@ export default function Sites() {
       render: (_, record) => {
         const { apiType, enableCheckIn, checkInSuccess, checkInMessage, checkInError } = record;
 
-        // 只有Veloera类型才显示签到状态
-        if (apiType !== 'veloera') {
+        // 只有Veloera和NewAPI类型才显示签到状态
+        if (apiType !== 'veloera' && apiType !== 'newapi') {
           return <Tooltip title="此站点类型不支持签到">
             <span style={{ fontSize: 32, color: '#d9d9d9', cursor: 'help', fontWeight: 'bold', lineHeight: 1 }}>●</span>
           </Tooltip>;
@@ -1255,7 +1442,7 @@ export default function Sites() {
         </div>
       )
     }
-  ]
+  ], [currentPage, collapsedGroups, nav, onCheck, openDebugModal, openTimeModal, openEditModal, onDelete, scheduleConfig, updateSortOrder])
 
   return (
     <Card
@@ -1392,7 +1579,7 @@ export default function Sites() {
         boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         background: '#fff'
       }}
-      bodyStyle={{ padding: '24px' }}
+      styles={{ body: { padding: '24px' } }}
     >
 
       {batchChecking && (
@@ -1423,31 +1610,38 @@ export default function Sites() {
         </div>
       )}
 
-      {/* 如果有搜索关键词，显示普通表格 */}
+      {/* 如果有搜索关键词，显示普通表格或移动端卡片 */}
       {searchKeyword ? (
         <>
           <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             搜索结果：找到 {list.length} 个站点
           </Typography.Text>
-          <Table
-            rowKey="id"
-            dataSource={list}
-            columns={columns}
-            loading={loading}
-            pagination={{
-              pageSize: 10,
-              showSizeChanger: false,
-              showTotal: (total) => `共 ${total} 个站点`
-            }}
-            style={{ marginTop: 8 }}
-          />
+          {isMobile ? (
+            <div>{list.map(renderMobileSiteCard)}</div>
+          ) : (
+            <Table
+              rowKey="id"
+              dataSource={list}
+              columns={columns}
+              loading={loading}
+              pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 个站点` }}
+              style={{ marginTop: 8 }}
+            />
+          )}
+        </>
+      ) : isMobile ? (
+        /* 移动端：卡片列表 */
+        <>
+          {renderMobileSiteList(pinnedSites, '置顶站点', '#fa8c16', <PushpinFilled style={{ color: 'white' }} />, 'pinned')}
+          {categories.map(cat => renderMobileSiteList(categorySitesMap.get(cat.id) || [], cat.name, '#1890ff', <FolderOutlined style={{ color: 'white' }} />, cat.id))}
+          {renderMobileSiteList(uncategorizedSites, '未分类', '#8c8c8c', <FolderOutlined style={{ color: 'white' }} />, 'uncategorized')}
         </>
       ) : (
-        /* 按分类分组显示 */
+        /* 桌面端：按分类分组显示 */
         <>
           {/* 置顶站点 */}
-          {list.filter(s => s.pinned).length > 0 && (
-            <div style={{ marginBottom: 24 }} className="fade-in">
+          {pinnedSites.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
               <div 
                 style={{
                   background: 'linear-gradient(135deg, #fa8c16 0%, #fa541c 100%)',
@@ -1457,18 +1651,9 @@ export default function Sites() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   boxShadow: '0 4px 16px rgba(250, 140, 22, 0.3)',
-                  transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   position: 'relative',
                   overflow: 'hidden'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(250, 140, 22, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(250, 140, 22, 0.3)';
                 }}
               >
                 <div style={{
@@ -1491,7 +1676,7 @@ export default function Sites() {
                     置顶站点
                   </Typography.Text>
                   <Tag color="orange" style={{ margin: 0 }}>
-                    {list.filter(s => s.pinned).length} 个
+                    {pinnedSites.length} 个
                   </Tag>
                 </Space>
                 <Space onClick={(e) => e.stopPropagation()}>
@@ -1516,29 +1701,25 @@ export default function Sites() {
                 </Space>
               </div>
               {!collapsedGroups.has('pinned') && (
-                <Table
-                  rowKey="id"
-                  dataSource={list.filter(s => s.pinned)}
+                <MemoTable
+                  dataSource={pinnedSites}
                   columns={columns}
                   loading={loading}
-                  pagination={false}
-                  style={{ borderRadius: '0 0 8px 8px' }}
                 />
               )}
             </div>
           )}
 
           {/* 各分类 */}
-          {categories.map((category, index) => {
-            const categorySites = list.filter(s => s.categoryId === category.id && !s.pinned)
+          {categories.map((category) => {
+            const categorySites = categorySitesMap.get(category.id) || []
             if (categorySites.length === 0) return null
             const isCollapsed = collapsedGroups.has(category.id)
 
             return (
               <div 
                 key={category.id} 
-                className="fade-in"
-                style={{ marginBottom: 24, animationDelay: `${index * 0.1}s` }}
+                style={{ marginBottom: 24 }}
               >
                 <div style={{
                   background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
@@ -1548,20 +1729,10 @@ export default function Sites() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   boxShadow: '0 4px 16px rgba(24, 144, 255, 0.3)',
-                  transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   position: 'relative',
                   overflow: 'hidden'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(24, 144, 255, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(24, 144, 255, 0.3)';
-                }}
-              >
+                }}>
                 <div style={{
                   position: 'absolute',
                   top: '-50%',
@@ -1650,13 +1821,10 @@ export default function Sites() {
                   </Space>
                 </div>
                 {!isCollapsed && (
-                  <Table
-                    rowKey="id"
+                  <MemoTable
                     dataSource={categorySites}
                     columns={columns}
                     loading={loading}
-                    pagination={false}
-                    style={{ borderRadius: '0 0 8px 8px' }}
                   />
                 )}
               </div>
@@ -1664,8 +1832,8 @@ export default function Sites() {
           })}
 
           {/* 未分类站点 */}
-          {list.filter(s => !s.categoryId && !s.pinned).length > 0 && (
-            <div style={{ marginBottom: 24 }} className="fade-in">
+          {uncategorizedSites.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
               <div 
                 style={{
                   background: 'linear-gradient(135deg, #8c8c8c 0%, #595959 100%)',
@@ -1675,18 +1843,9 @@ export default function Sites() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   boxShadow: '0 4px 16px rgba(140, 140, 140, 0.3)',
-                  transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   position: 'relative',
                   overflow: 'hidden'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(140, 140, 140, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(140, 140, 140, 0.3)';
                 }}
               >
                 <div style={{
@@ -1709,7 +1868,7 @@ export default function Sites() {
                     未分类
                   </Typography.Text>
                   <Tag color="default" style={{ margin: 0 }}>
-                    {list.filter(s => !s.categoryId && !s.pinned).length} 个
+                    {uncategorizedSites.length} 个
                   </Tag>
                 </Space>
                 <Space onClick={(e) => e.stopPropagation()}>
@@ -1790,13 +1949,10 @@ export default function Sites() {
                 </Space>
               </div>
               {!collapsedGroups.has('uncategorized') && (
-                <Table
-                  rowKey="id"
-                  dataSource={list.filter(s => !s.categoryId && !s.pinned)}
+                <MemoTable
+                  dataSource={uncategorizedSites}
                   columns={columns}
                   loading={loading}
-                  pagination={false}
-                  style={{ borderRadius: '0 0 8px 8px' }}
                 />
               )}
             </div>
@@ -1855,7 +2011,7 @@ export default function Sites() {
               name="apiType"
               label={<span style={{ fontSize: 15, fontWeight: 500 }}>API 类型</span>}
               rules={[{ required: true, message: '请选择API类型' }]}
-              initialValue="other"
+              initialValue="newapi"
             >
               <Select
                 placeholder="选择API类型"
@@ -2165,14 +2321,14 @@ export default function Sites() {
               </div>
             </div>
             
-            {/* 签到配置 - 仅Veloera类型显示 */}
+            {/* 签到配置 - Veloera和NewAPI类型显示 */}
             <Form.Item
               noStyle
               shouldUpdate={(prev, curr) => prev.apiType !== curr.apiType}
             >
               {({ getFieldValue }) => {
                 const apiType = getFieldValue('apiType')
-                const showCheckIn = apiType === 'veloera'
+                const showCheckIn = apiType === 'veloera' || apiType === 'newapi'
                 return showCheckIn ? (
                   <>
                     <Divider style={{ margin: '16px 0' }}>签到配置</Divider>
@@ -2180,7 +2336,7 @@ export default function Sites() {
                       name="enableCheckIn"
                       label={<span style={{ fontSize: 15, fontWeight: 500 }}>启用自动签到</span>}
                       valuePropName="checked"
-                      extra="仅Veloera类型支持自动签到功能"
+                      extra="Veloera和NewAPI类型支持自动签到功能"
                       initialValue={false}
                     >
                       <Switch

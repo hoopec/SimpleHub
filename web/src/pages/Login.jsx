@@ -40,7 +40,7 @@ export default function Login() {
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           overflow: 'hidden'
         }}
-        bodyStyle={{ padding: 48 }}
+        styles={{ body: { padding: 48 } }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <ApiOutlined style={{ 

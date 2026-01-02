@@ -25,9 +25,21 @@ function authHeaders(includeJson = false) {
   return h;
 }
 
+// 检测是否为移动端
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function SiteDetail() {
   const { id } = useParams()
   const nav = useNavigate()
+  const isMobile = useIsMobile()
   const [diffs, setDiffs] = useState([])
   const [snapshot, setSnapshot] = useState([])
   const [loading, setLoading] = useState(false)
@@ -729,37 +741,29 @@ export default function SiteDetail() {
       <Button 
         icon={<ArrowLeftOutlined />}
         onClick={() => nav('/')}
-        size="large"
+        size={isMobile ? 'middle' : 'large'}
         style={{ 
-          marginBottom: 20,
-          fontSize: 15,
+          marginBottom: isMobile ? 12 : 20,
+          fontSize: isMobile ? 13 : 15,
           borderRadius: '10px',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-          transition: 'all 0.3s ease'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateX(-4px)';
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.12)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateX(0)';
-          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
         }}
       >
-        返回站点列表
+        返回
       </Button>
 
       <Card 
         className="fade-in"
         style={{
-          borderRadius: 16,
+          borderRadius: isMobile ? 12 : 16,
           boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-          marginBottom: 24,
+          marginBottom: isMobile ? 16 : 24,
           background: 'linear-gradient(135deg, #ffffff 0%, #f5f7fa 100%)',
           border: '1px solid rgba(24, 144, 255, 0.1)',
           overflow: 'hidden',
           position: 'relative'
         }}
+        styles={{ body: { padding: isMobile ? 12 : 24 } }}
       >
         <div style={{
           position: 'absolute',
@@ -772,80 +776,49 @@ export default function SiteDetail() {
           transform: 'translate(50%, -50%)',
           pointerEvents: 'none'
         }} />
-        <Row gutter={24} style={{ position: 'relative', zIndex: 1 }}>
+        <Row gutter={isMobile ? 8 : 24} style={{ position: 'relative', zIndex: 1 }}>
           <Col span={8}>
             <div style={{ 
-              padding: '16px',
+              padding: isMobile ? '10px' : '16px',
               borderRadius: '12px',
               background: 'rgba(24, 144, 255, 0.05)',
-              transition: 'all 0.3s ease',
-              cursor: 'pointer'
-            }}
-            className="stat-card"
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px rgba(24, 144, 255, 0.15)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
+              textAlign: isMobile ? 'center' : 'left'
+            }}>
               <Statistic 
-                title={<span style={{ fontSize: 15, fontWeight: 600, color: '#666' }}>当前模型数</span>}
+                title={<span style={{ fontSize: isMobile ? 11 : 15, fontWeight: 600, color: '#666' }}>模型数</span>}
                 value={snapshot.length}
-                prefix={<ApiOutlined style={{ color: '#1890ff' }} />}
-                valueStyle={{ color: '#1890ff', fontSize: 36, fontWeight: 800 }}
+                prefix={!isMobile && <ApiOutlined style={{ color: '#1890ff' }} />}
+                valueStyle={{ color: '#1890ff', fontSize: isMobile ? 20 : 36, fontWeight: 800 }}
               />
             </div>
           </Col>
           <Col span={8}>
             <div style={{ 
-              padding: '16px',
+              padding: isMobile ? '10px' : '16px',
               borderRadius: '12px',
               background: 'rgba(82, 196, 26, 0.05)',
-              transition: 'all 0.3s ease',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px rgba(82, 196, 26, 0.15)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
+              textAlign: isMobile ? 'center' : 'left'
+            }}>
               <Statistic 
-                title={<span style={{ fontSize: 15, fontWeight: 600, color: '#666' }}>历史新增</span>}
+                title={<span style={{ fontSize: isMobile ? 11 : 15, fontWeight: 600, color: '#666' }}>新增</span>}
                 value={totalAdded}
-                prefix={<PlusCircleOutlined style={{ color: '#52c41a' }} />}
-                valueStyle={{ color: '#52c41a', fontSize: 36, fontWeight: 800 }}
+                prefix={!isMobile && <PlusCircleOutlined style={{ color: '#52c41a' }} />}
+                valueStyle={{ color: '#52c41a', fontSize: isMobile ? 20 : 36, fontWeight: 800 }}
               />
             </div>
           </Col>
           <Col span={8}>
             <div style={{ 
-              padding: '16px',
+              padding: isMobile ? '10px' : '16px',
               borderRadius: '12px',
               background: 'rgba(255, 77, 79, 0.05)',
-              transition: 'all 0.3s ease',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px rgba(255, 77, 79, 0.15)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
+              textAlign: isMobile ? 'center' : 'left'
+            }}>
               <Statistic 
-                title={<span style={{ fontSize: 15, fontWeight: 600, color: '#666' }}>历史移除</span>}
+                title={<span style={{ fontSize: isMobile ? 11 : 15, fontWeight: 600, color: '#666' }}>移除</span>}
                 value={totalRemoved}
-                prefix={<MinusCircleOutlined style={{ color: '#ff4d4f' }} />}
-                valueStyle={{ color: '#ff4d4f', fontSize: 36, fontWeight: 800 }}
+                prefix={!isMobile && <MinusCircleOutlined style={{ color: '#ff4d4f' }} />}
+                valueStyle={{ color: '#ff4d4f', fontSize: isMobile ? 20 : 36, fontWeight: 800 }}
               />
             </div>
           </Col>
@@ -853,68 +826,44 @@ export default function SiteDetail() {
       </Card>
 
       {/* 功能气泡区域 */}
-      <Row gutter={16} style={{ marginBottom: 24 }} className="slide-in-right">
+      <Row gutter={isMobile ? 8 : 16} style={{ marginBottom: isMobile ? 16 : 24 }} className="slide-in-right">
         <Col span={12}>
           <Card
             hoverable
             onClick={openTokenModal}
             style={{
-              borderRadius: 20,
+              borderRadius: isMobile ? 12 : 20,
               boxShadow: '0 8px 32px rgba(24, 144, 255, 0.25)',
               background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
               border: 'none',
               cursor: 'pointer',
-              minHeight: 140,
+              minHeight: isMobile ? 80 : 140,
               position: 'relative',
-              overflow: 'hidden',
-              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+              overflow: 'hidden'
             }}
-            bodyStyle={{
+            styles={{ body: {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '32px',
+              padding: isMobile ? '16px' : '32px',
               position: 'relative',
               zIndex: 1
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-              e.currentTarget.style.boxShadow = '0 16px 48px rgba(24, 144, 255, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(24, 144, 255, 0.25)';
-            }}
+            } }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%)',
-              borderRadius: '50%',
-              pointerEvents: 'none'
-            }} />
             <KeyOutlined style={{ 
-              fontSize: 56, 
+              fontSize: isMobile ? 28 : 56, 
               color: '#fff', 
-              marginBottom: 16,
-              filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2))',
-              animation: 'bounce 2s ease-in-out infinite'
+              marginBottom: isMobile ? 8 : 16
             }} />
-            <Typography.Title level={3} style={{ margin: 0, color: '#fff', fontWeight: 700 }}>
+            <Typography.Title level={isMobile ? 5 : 3} style={{ margin: 0, color: '#fff', fontWeight: 700 }}>
               令牌管理
             </Typography.Title>
-            <Typography.Text style={{ 
-              color: 'rgba(255,255,255,0.95)', 
-              marginTop: 12,
-              fontSize: 15,
-              fontWeight: 500
-            }}>
-              查看、修改和删除API令牌
-            </Typography.Text>
+            {!isMobile && (
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.95)', marginTop: 12, fontSize: 15 }}>
+                查看、修改和删除API令牌
+              </Typography.Text>
+            )}
           </Card>
         </Col>
         <Col span={12}>
@@ -922,62 +871,38 @@ export default function SiteDetail() {
             hoverable
             onClick={openRedeemModal}
             style={{
-              borderRadius: 20,
+              borderRadius: isMobile ? 12 : 20,
               boxShadow: '0 8px 32px rgba(19, 194, 194, 0.25)',
               background: 'linear-gradient(135deg, #13c2c2 0%, #08979c 100%)',
               border: 'none',
               cursor: 'pointer',
-              minHeight: 140,
+              minHeight: isMobile ? 80 : 140,
               position: 'relative',
-              overflow: 'hidden',
-              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+              overflow: 'hidden'
             }}
-            bodyStyle={{
+            styles={{ body: {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '32px',
+              padding: isMobile ? '16px' : '32px',
               position: 'relative',
               zIndex: 1
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-              e.currentTarget.style.boxShadow = '0 16px 48px rgba(19, 194, 194, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(19, 194, 194, 0.25)';
-            }}
+            } }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%)',
-              borderRadius: '50%',
-              pointerEvents: 'none'
-            }} />
             <GiftOutlined style={{ 
-              fontSize: 56, 
+              fontSize: isMobile ? 28 : 56, 
               color: '#fff', 
-              marginBottom: 16,
-              filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2))',
-              animation: 'pulse 2s ease-in-out infinite'
+              marginBottom: isMobile ? 8 : 16
             }} />
-            <Typography.Title level={3} style={{ margin: 0, color: '#fff', fontWeight: 700 }}>
+            <Typography.Title level={isMobile ? 5 : 3} style={{ margin: 0, color: '#fff', fontWeight: 700 }}>
               兑换码
             </Typography.Title>
-            <Typography.Text style={{ 
-              color: 'rgba(255,255,255,0.95)', 
-              marginTop: 12,
-              fontSize: 15,
-              fontWeight: 500
-            }}>
-              使用兑换码充值余额
-            </Typography.Text>
+            {!isMobile && (
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.95)', marginTop: 12, fontSize: 15 }}>
+                使用兑换码充值余额
+              </Typography.Text>
+            )}
           </Card>
         </Col>
       </Row>
@@ -986,24 +911,24 @@ export default function SiteDetail() {
         className="fade-in-up"
         title={
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <ApiOutlined style={{ marginRight: 12, fontSize: 24, color: '#1890ff' }} />
-            <Typography.Title level={4} style={{ margin: 0, fontWeight: 700 }}>当前模型列表</Typography.Title>
+            <ApiOutlined style={{ marginRight: isMobile ? 8 : 12, fontSize: isMobile ? 18 : 24, color: '#1890ff' }} />
+            <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, fontWeight: 700 }}>当前模型列表</Typography.Title>
           </div>
         }
           extra={
-            <Space size="middle">
+            <Space size={isMobile ? 'small' : 'middle'} wrap>
               <Input
-                placeholder="搜索模型ID"
+                placeholder="搜索模型"
                 value={modelSearchText}
                 onChange={(e) => setModelSearchText(e.target.value)}
                 allowClear
-                size="large"
-                style={{ width: 200, borderRadius: '8px' }}
+                size={isMobile ? 'middle' : 'large'}
+                style={{ width: isMobile ? 120 : 200, borderRadius: '8px' }}
               />
               <Button 
                 icon={modelsExpanded ? <UpOutlined /> : <DownOutlined />}
               onClick={() => setModelsExpanded(!modelsExpanded)}
-              size="large"
+              size={isMobile ? 'middle' : 'large'}
               style={{ 
                 fontSize: 15,
                 borderRadius: '8px',
@@ -1656,7 +1581,7 @@ const ModelCard = memo(({ model, onCopy, pricing }) => (
         border: '1px solid #e8e8e8',
         position: 'relative'
       }}
-      bodyStyle={{ padding: '12px' }}
+      styles={{ body: { padding: '12px' } }}
     >
       <Button
         type="text"
@@ -1755,7 +1680,7 @@ const DiffItemCard = memo(({ item, type, onCopy }) => {
           background: '#fff',
           position: 'relative'
         }}
-        bodyStyle={{ padding: 12 }}
+        styles={{ body: { padding: 12 } }}
       >
         <Button
           type="text"

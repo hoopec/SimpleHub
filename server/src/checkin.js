@@ -1,18 +1,18 @@
 const { decrypt } = require('./crypto');
 
 /**
- * 执行Veloera签到
+ * 执行签到（支持 Veloera 和 NewAPI）
  * @param {Object} site - 站点信息
  * @returns {Object} - { success: boolean, message: string, quota: number|null, error: string|null }
  */
 async function performCheckIn(site) {
-  // 只支持Veloera类型
-  if (site.apiType !== 'veloera') {
+  // 支持 Veloera 和 NewAPI 类型
+  if (site.apiType !== 'veloera' && site.apiType !== 'newapi') {
     return {
       success: false,
       message: '不支持的站点类型',
       quota: null,
-      error: '仅Veloera类型支持签到'
+      error: '仅Veloera和NewAPI类型支持签到'
     };
   }
 
@@ -40,9 +40,14 @@ async function performCheckIn(site) {
     // 解密API Key
     const token = decrypt(site.apiKeyEnc);
     
-    // 构建签到URL
+    // 构建签到URL（NewAPI 和 Veloera 端点不同）
     const baseUrl = site.baseUrl.replace(/\/+$/, ''); // 移除末尾斜杠
-    const checkInUrl = `${baseUrl}/api/user/check_in`;
+    const checkInUrl = site.apiType === 'newapi' 
+      ? `${baseUrl}/api/user/checkin`
+      : `${baseUrl}/api/user/check_in`;
+    
+    // 构建请求头（NewAPI 和 Veloera 使用不同的用户ID头）
+    const userHeader = site.apiType === 'newapi' ? 'new-api-user' : 'veloera-user';
     
     console.log(`[签到] 开始签到: ${site.name} (${checkInUrl})`);
     
@@ -51,7 +56,7 @@ async function performCheckIn(site) {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'veloera-user': site.userId,
+        [userHeader]: site.userId,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Cache-Control': 'no-store'
@@ -114,13 +119,16 @@ async function performCheckIn(site) {
  * @returns {boolean}
  */
 function shouldCheckIn(site, isManual = false) {
+  // 支持 Veloera 和 NewAPI 类型
+  const supportedTypes = ['veloera', 'newapi'];
+  
   // 手动触发时，只要启用了签到就执行
   if (isManual) {
-    return site.apiType === 'veloera' && site.enableCheckIn;
+    return supportedTypes.includes(site.apiType) && site.enableCheckIn;
   }
   
   // 定时任务时，根据 checkInMode 判断
-  if (site.apiType !== 'veloera' || !site.enableCheckIn) {
+  if (!supportedTypes.includes(site.apiType) || !site.enableCheckIn) {
     return false;
   }
   
